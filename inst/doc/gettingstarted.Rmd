@@ -1,0 +1,243 @@
+---
+title: "Bayesian Response-Adaptive Design Analysis with BRADA"
+author: "Riko Kelter"
+output:
+  rmarkdown::html_vignette:
+      #css: style.css
+      toc: FALSE
+vignette: >
+  %\VignetteIndexEntry{Brada1}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+
+---
+
+
+
+<br><br>
+
+<div class="mycontent">
+
+```{r, include = FALSE}
+old <- options()
+options(rmarkdown.html_vignette.check_title = FALSE)
+# chunk option dev="png" is the default raster graphics format for HTML output
+knitr::opts_chunk$set(dev="png")
+options(mc.cores=2)
+```
+
+# Introduction
+
+In this vignette, the functionality of the `brada` package is outlined. The `brada` package provides access to functions which help to plan, analyze and conduct Bayesian response-adaptive (clinical) trial designs. In the current version, the `brada` package supports only phase IIA trials with a binary endpoint for response or success. Also, the scope of the package is on group-sequential designs, where based on interim analyses the trial can be stopped early for futility or efficacy. In the future, it is planned to include more Bayesian response-adaptive designs in the package.
+
+The outline of the vignette is as follows:
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 5px;}
+</style>
+<div class = "blue">
+- The first section gives a brief overview about the predictive probability design
+- The second section outlines how to get started with the `brada` package and introduces the core functionality
+</div>
+
+Note that there are more vignettes which illustrate 
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 5px;}
+</style>
+<div class = "blue">
+- how to apply and calibrate the predictive evidence value design with the `brada` package. This vignette is hosted at the <a href="https://osf.io/zmfyn/?view_only=348067ed1ccc498da7e4a11d949c84df">Open Science Foundation</a>.
+- how to monitor a running clinical trial with a binary endpoint by means of the `brada` package
+</div>
+
+This vignette builds the starting point, and the vignettes above provide further details.
+
+***
+
+# The predictive probability design
+
+The general setting considered in is a single-arm phase IIA trial with the goal to evaluate the response rate $p\geq 0$ for a new drug or treatment. The null hypothesis $H_0:p\leq p_0$ is tested against the alternative $H_1:p>p_1$, where $p_0,p_1\in [0,1]$, $p_0 \leq p_1$ and $p_0$ is a predefined threshold for determining the minimum clinically important effect (Kelter, 2021b). For simplicity, assume a Beta prior $p\sim B(a_0,b_0)$ is selected for the response rate $p$, which offers a broad range of flexibility in terms of modelling the prior beliefs about $p$. For the Beta prior, $a_0/(a_0+b_0)$ is the mean and $a_0$ and $b_0$ can be interpreted as the numbers of effective prior responses and non-responses. Thus, $a_0+b_0$ gives a measure of how informative the prior is with larger values of $a_0+b_0$ indicating a more informative prior distribution.
+
+Let $N_{\text{max}}$ be the maximum number of patients which is possibly recruited during the trial, and let $X$ be the random variable which measures the number of responses in the current $n$ enrolled patients, where $n\leq N_{\text{max}}$. A reasonable assumption is that $X$ follows a binomial distribution with parameters $n$ and $p$, $X\sim \text{Bin}(n,p)$. The $B(a_0,b_0)$ distribution is a conjugate prior for the binomial likelihood, and thus the posterior $P_{p|X}$ is also Beta-distributed \citep{Held2014}:
+$$
+	p|X=x\sim B(a_0+x,b_0+n-x)
+$$
+The idea of the predictive probability approach consists of analyzing the interim data to project whether the trial will result in a conclusion that the drug or treatment is effective or ineffective. Efficacy is declared when the posterior probability fulfills the constraint
+$$
+	P_{p|X,Y}(p>p_0|X=x,Y=i)>\theta_T	
+$$
+for some threshold $\theta_T \in [0,1]$. That is, when $n$ patients have been enrolled in the trial out of which $X=x$ show a response, there remain $m=N_{\text{max}}-n$ patients which can be enrolled in the trial. If out of these remaining $m$ exactly $i$ respond to the treatment, and the conditional probability $P_{p|X,Y}(p>p_0|X=x,Y=i)$ is larger than a prespecified threshold $\theta_T$, say, $\theta_T=0.95$, this will be interpreted as the drug being effective. However, as the number $Y$ of responses in the remaining $m=N_{\text{max}}-n$ patients which can be enrolled in the trial is uncertain, this uncertainty must be modeled, too. Marginalizing out $p$ of the binomial likelihood yields the prior predictive distribution which is Beta-Binomial
+$$
+Y\sim \text{Beta-Binom}(m,a_0+x,b_0+n-x)
+$$
+Additionally, from the conjugacy of the beta prior we have the posterior
+$$
+P_{p|X,Y}(X=x,Y=i)\sim B(a_0+x+i,b_0+N_{\text{max}}-x-i)
+$$
+and the expected predictive probability of trial success -- henceforth abbreviated $\text{PP}$ -- can now be calculated by weighing the posterior probability of trial success $$
+P_{p|X,Y}(p>p_0|X=x,Y=i)>\theta_T
+$$
+when observing $X=x$ and $Y=i$ with the prior predictive probability $P_{Y|X}(Y=i|X=x)$ of observing $Y=i$ responses in the remaining $m=N_{\text{max}}-n$ patients, after $X=x$ responses have been observed among the current $n$ patients:
+$$
+	\text{PP}=\mathbb{E}\left [ 1_{P_{p|X,Y}(p>p_0|X,Y)>\theta_T}|x\right ]=\int_{\mathcal{Y}}1_{P_{p|X,Y}(p>p_0|X,Y)>\theta_T}dP_{Y|X=x}=\sum_{i=0}^m P_{Y|X=x}(i)\cdot 1_{P_{p|X,Y}(p>p_0|X=x,Y=i)>\theta_T}
+$$
+where
+$$
+	1_{P_{p|X,Y}(p>p_0|X=x,Y=i)>\theta_T}:=\begin{cases}
+		1, \text{ if } P_{p|X,Y}(p>p_0|X=x,Y=i)>\theta_T\\
+		0, \text{ if } P_{p|X,Y}(p>p_0|X=x,Y=i)\leq \theta_T
+	\end{cases}
+$$
+is an indicator which measures whether the evidence against $H_0:p\leq p_0$ is large enough -- that is, $P_{p|X,Y}(p>p_0|X=x,Y=i)>\theta_T$ -- conditional on $X=x$ and $Y=i$ or not. The predictive probability $\text{PP}$ thus quantifies the expected predictive probability of trial success. To employ the approach in practice, futility and efficacy thresholds $\theta_L$ and $\theta_U$ out of $[0,1]$ must be fixed, so that the value of $\text{PP}$ can be compared to these thresholds based on available interim data $X=x$. Then, if $\text{PP}<\theta_L$, respectively $\text{PP}>\theta_U$, the trial can be stopped early for futility, respectively efficacy. Fig. 1 shows the PP group-sequential design, see also Berry (2011), Rosner (2020) and Rosner (2021). Note that in practice, $\theta_U=1.0$ is often preferred because if the drug is effective one does not want to stop the trial. However, $\theta_L>0$ is important to stop the trial in case the drug or treatment is not effective to avoid a waste of resources.
+
+```{r,fig.align='center', echo=FALSE, fig.cap="The predictive probability design for binary endpoints", out.width = "700px", dpi = 100}
+knitr::include_graphics("pp-min.png")
+```
+
+Fig. 1 shows that based on the current data, the probability to obtain $Y=i$ successes is weighted with the probability of success $P_{p|X,Y}(p>p_0|X=x,Y=i)>\theta_T$ for each $i=0,m$. This weighted sum is the predictive probability of trial success, should the trial be continued until the maximum trial size $N_{max}$.
+
+***
+
+# Getting started
+To apply the package, first, load the \code{brada} package:
+```{r, warning=FALSE, message=FALSE, class.source="chunks", class.output="bg-warning"}
+library(brada)
+```
+
+## Example
+We start with a simple example. Suppose we want to perform a phase IIA trial with a binary endpoint and assume that we can recruit one patients per week. Suppose the outcome, response or no response to the treatment, is available for each patient 6 weeks after application. Thus, the patient enrolled at $t=0$ shows response or no response at $t=6$. If we want to perform the first interim analysis of $H_0:p\leq p_0$ against $H_1:p>p_0$ based on the results of the first $10$ patients, then the first interim analysis can be performed at $t=16$ (the 10th patient's result is available at $t=16$ when one patient is recruited each week).
+
+The lag between application of treatment and observing a response or no response is bypassed in the `brada` package by simply considering the maximum number of patients which can be recruited. This value is the trial size $N_{max}$ which is realistic for researchers to recruit. Suppose we know from experience that $N_{max}=40$ is realistic for the next year.
+
+Assume further that we plan to perform interim analyses after the first $10$ patient's have been recruited, and after that after each batch of $5$ newly recruited patient's results are available.
+
+Suppose we want to test whether $H_0:p\leq 0.2$ against $H_1:p>0.2$, and we apply the predictive probability design based on $\theta_T=0.90$, $\theta_L=0.1$ and $\theta_U=1.0$. The latter means that we apply the 90\% probability threshold for a result to be convincing, we stop for futility if the predictive probability of trial success in an interim analysis drops below $10\%$, and we never stop for efficacy ($\theta_U=1.0$). For simplicity, we use a flat $B(1,1)$ prior, and we are interested in the trial's operating characteristics.
+
+Clearly, we perform multiple testing on the same data, and it is not straightforward to estimate the resulting false-positive rate under $H_0:p\leq 0.2$. Also, we would like to know how large the probability is to obtain *compelling* evidence. This means, we do not want to end the trial at $N_{max}=40$ without having stopped for futility or efficacy earlier during one of the interim analyses. If the trial does stop at $N_{max}=40$, the advantage of performing a group-sequential approach has essentially vanished, so the design was not capable to produce *compelling* evidence in favour of $H_0$ (or $H_1$) at one of the preceding interim analyses. This is unsatisfying, and we typically are interested in the probability that the design produces such *compelling* evidence.
+
+Note that a different option would be to check how large the probability is to obtain a conclusive test result based on $N_{max}$. However, this is useful for a fixed-sample size design. A group-sequential design should stop for futility under $H_0$ and for efficacy under $H_1$ during one of the interim analyses, ideally as early as possible.
+
+The following code runs the `brada` function, which is the core of the package:
+
+```{r, warning=FALSE, message=FALSE, fig.align="center", class.source="chunks"}
+design = brada(Nmax = 40, batchsize = 5, nInit = 10, 
+               p_true = 0.2 , p0 = 0.2, p1 = 0.2, 
+               nsim = 100, 
+               cores = 2)
+```
+In the above, the `brada` function stores the results of the Bayesian response-adaptive design analyses. The arguments are as follows:
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 5px;}
+</style>
+<div class = "blue">
+- `Nmax` is the maximum trial size, here $40$
+- `batchsize` is the batch size of responses after each of which the next interim analyses is performed, here after 5 new observations are made
+- `nInit` is the initial sample size at which the first interim analysis is run, here after 10 observed responses
+- `p_true` is the true response probability which is required for the Monte Carlo algorithm to simulate the design characteristics
+- `p_0` is the boundary in $H_0:p\leq p_0$
+- `p_1` is the boundary in $H_1:p>p_1$. This is useful if we want to test, say, $H_0:p\leq 0.2$ against $H_1:p>0.4$
+- `nsim` is the Monte Carlo simulation size, so 100 trials are simulated to analyze the resulting trial operating characteristics
+- `cores` is the number of computing cores used for executing the task. It is recommended to use at least $2$ cores, which is the default value. If your machine has more cores, which can be checked with `parallel::detectCores()`, the computation times will improve.
+</div>
+
+The `brada` function actually has more arguments, and the same result is obtained when running this code chunk:
+```{r, warning=FALSE, message=FALSE, fig.align="center", fig.height=6, class.source="chunks"}
+design = brada(Nmax = 40, batchsize = 5, nInit = 10, 
+               p_true = 0.2 , p0 = 0.2, p1 = 0.2, 
+               nsim = 100,
+               a0 = 1, b0 = 1, 
+               theta_T = 0.90, theta_L = 0.1, theta_U = 1, 
+               method = "PP",
+               cores = 2)
+```
+Here, the additional arguments are `a0` and `b0`, which are the shape parameters of the beta prior (thus, the `brada` function uses a flat prior by default), the threshold `theta_T=0.90`, which is the threshold for a trajectory contributing to $PP$ in the $PP$ design, and the boundaries `theta_L=0.1` and `theta_U=1` for stopping for futility and efficacy. If we would like to stop for futility if $PP<0.05$, stop for efficacy if $PP>0.95$, and use a Jeffreys' $B(0.5,0.5)$ prior instead, we could run
+```{r, class.source="chunks", class.output="output"}
+new_design = brada(Nmax = 40, batchsize = 5, nInit = 10, 
+                   p_true = 0.2 , p0 = 0.2, p1 = 0.2, 
+                   nsim = 100,
+                   a0 = 0.5, b0 = 0.5, 
+                   theta_T = 0.90, theta_L = 0.05, theta_U = 0.95, 
+                   method = "PP",
+                   cores = 2)
+```
+instead. Now, to obtain the results of the design analysis, we can summarize the content of the `brada` object:
+```{r, class.source="chunks", class.output="output"}
+summary(design)
+```
+The first part provides information about the design analyzed, and the lower part shows the most important results, the design's operating characteristics (Berry, 2011). Based on these, we can see that the design on average required 23.15 patients before a decision is reached in favour of $H_0$ or $H_1$. Also, the probability to stop for futility is $79\%$, while the probability to stop for efficacy is only $0.05\%$. This is to be expected because we set `p_true=0.2` in the `brada` function call, so data are simulated according $H_0:p\leq 0.2$. Now, somewhat less obvious, the results indicate that $16\%$ of the trials which follow this protocol do not provide compelling evidence at the last interim analyses is run, here at $35$ observations. Thus, in $16\%$ of the cases the trial is continued until `Nmax=40`, which is somewhat unsatisfying because the null hypothesis holds and the true response probability is 20\%.
+
+In comparison, if we summarize the results of the design using different stopping thresholds and Jeffrey's prior, we get:
+```{r, class.source="chunks", class.output="output"}
+summary(new_design)
+```
+We see that the operating characteristics have changed.
+
+The `brada` package provides a simple default plotting function to visualize the results of a Bayesian response-adaptive design analysis and communicate and report the results:
+```{r,fig.align='center', fig.width = 7, fig.height = 5, out.width = "600", out.height = "450", class.source="chunks", dpi=100}
+plot(design)
+```
+The `summary` and `plot` function of a `brada` object are the core to plan a Bayesian phase IIA trial for the predictive probability or predictive evidence value approach. The plot includes two parts:
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 5px;}
+</style>
+<div class = "blue">
+- A boxplot at the top for the number of patients in the trial. Here, the distribution of the required number of patients is visualized which helps to check whether the specifications of the design are realistic. For example, the average required number of patients (here $23.15$) can be used to estimate the costs and time which is necessary to carry out the trial. Also, the interquartile range shows that more than 50\% of the trials require between $10$ and $35$ patients.
+- A trajectory or spiderweb-plot at the bottom, which shows the simulated `nsim` trial trajectories. Here, only `nsim=100` trajectories are shown, but in practice one will opt for a larger value of `nsim` to reduce the Monte Carlo standard error of all operating characteristics. Based on the trajectories, the analysis shows that 79\% stop for futility, 5\% stop for efficacy and 16\% to not provide compelling evidence at the last interim analysis at $35$ observations (shown as the vertical dotted blue line)
+</div>
+The plot of the `brada` object allows to plan a Bayesian trial to achieve certain operating characteristics. For example, we might require a false-positive rate of, say, $5\%$, and a power of $80\%$ for $p>0.4$.
+
+# Computational details
+The `brada` package uses vectorization and parallelization to obtain efficient runtimes. Internally, the `brada` function relies on the `doParallel` and `foreach` packages and sets up a cluster based on two cores as specified in the `cores=2` default argument for the `brada` function. It is recommended to use more cores if available, both for the `brada` and the `power` function. Next to the parallelization, the `brada` package makes use of the conjugacy of the predictive probability and predictive evidence value models and relies on the `fbst` package to compute Bayesian evidence values efficiently. Together, these features enable to obtain runtimes of at most a few minutes for even thousands of Monte Carlo simulations, instead of hours. In most cases, the runtimes are a few seconds for the predictive probability approach and less than a few minutes for the predictive evidence approach. Also, the `brada` function shows a progress bar and estimated finish time for each analysis.
+
+Note that it is also possible to simulate the trial data and do custom analyses by yourself via the `generateData` function:
+```{r, class.source="chunks", class.output="output"}
+trial_data = generateData(p = 0.2, Nmax = 40, nsim = 100, seed = 420)
+library(DT)
+datatable(trial_data, rownames = FALSE, filter="top", 
+          options = list(pageLength = 5, scrollX=T),
+          caption = 'Simulated trial data for a phase IIA trial with a binary endpoint')
+```
+Also, one could apply custom analyses to the `brada` objects.
+```{r, class.source="chunks", class.output="output"}
+head(new_design$trials)
+```
+The first column includes the futility status (1 = futility, 2 = efficacy), the second column the trials sample size, and the remaining columns the predictive probability of trial success or the predictive evidence for trial success at each interim analysis. Thus, the third column includes the value at 10 observations, the fourth the value at 15 observations and so forth.
+
+For example, one could filter the trials which stopped early due to futility at $20$ observations as follows:
+```{r, class.source="chunks", class.output="output"}
+sum(new_design$trials[,6] < 0.05)/100
+```
+
+*** 
+
+The vignette hosted at the <a href="https://osf.io/zmfyn/?view_only=348067ed1ccc498da7e4a11d949c84df">Open Science Foundation</a> provides information on how to calibrate the group-sequential predictive probability and predictive evidence designs. In particular, it demonstrates how to perform sample size calculations and power analyses with the `power()` function.
+
+***
+
+```{r, include = FALSE}
+options(old)
+```
+
+# References
+Berry, S. M. (2011). Bayesian Adaptive Methods for Clinical Trials. CRC Press.
+
+Kelter, R. (2022). The Evidence Interval and the Bayesian Evidence Value - On a unified theory for Bayesian hypothesis testing and interval estimation. British Journal of Mathematical and Statistical Psychology (2022). https://doi.org/10.1111/bmsp.12267
+
+Kelter, R. (2021b). Bayesian Hodges-Lehmann tests for statistical equivalence in the two-sample setting: Power analysis, type I error rates and equivalence boundary selection in biomedical research. BMC Medical Research Methodology, 21(171). https://doi.org/10.1186/s12874-021-01341-7
+
+Kelter, R. (2021a). fbst: An R package for the Full Bayesian Significance Test for testing a sharp null hypothesis against its alternative via the e-value. Behav Res (2021). https://doi.org/10.3758/s13428-021-01613-6
+
+Kelter, R. (2020). Analysis of Bayesian posterior significance and effect size indices for the two-sample t-test to support reproducible medical research. BMC Medical Research Methodology, 20(88). https://doi.org/https://doi.org/10.1186/s12874-020-00968-2
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. Statistics in Medicine, 38(11), 2074–2102. https://doi.org/10.1002/SIM.8086
+
+Pereira, C. A. d. B., & Stern, J. M. (2020). The e-value: a fully Bayesian significance measure for precise statistical hypotheses and its research program. São Paulo Journal of Mathematical Sciences, 1–19. https://doi.org/10.1007/s40863-020-00171-7
+
+Rosner, G. L. (2021). Bayesian Thinking in Biostatistics. Chapman and Hall/CRC.
+
+Rosner, G. L. (2020). Bayesian Adaptive Designs in Drug Development. In E. Lesaffre, G. Baio, & B. Boulanger (Eds.), Bayesian Methods in Pharmaceutical Research (pp. 161–184). CRC Press.
+
+Rouder, Jeffrey N., Paul L. Speckman, Dongchu Sun, Richard D. Morey, and Geoffrey Iverson. 2009. “Bayesian t tests for accepting and rejecting the null hypothesis.” Psychonomic Bulletin and Review 16 (2): 225–37. https://doi.org/10.3758/PBR.16.2.225
+
+<br><br><br>
+</div>

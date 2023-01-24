@@ -1,0 +1,21 @@
+importFrom("grDevices", "rgb")
+importFrom("graphics", "abline", "axis", "boxplot", "layout", "lines",
+             "mtext", "par")
+importFrom("methods", "new")
+importFrom("stats", "dbeta", "pbeta", "rbinom")
+importFrom("utils", "setTxtProgressBar", "txtProgressBar")
+
+import("foreach")
+import("doParallel")
+import("parallel")
+import("doSNOW")
+import("progress")
+import("cli")
+
+importFrom("stats", "sd")
+
+exportPattern("^[^\\\\.]")
+
+S3method(plot, brada)
+S3method(summary, brada)
+S3method(names, brada)
